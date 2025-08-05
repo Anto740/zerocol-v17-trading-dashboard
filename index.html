@@ -328,24 +328,81 @@
         }
 
         async function estimateGas() {
+            if (!isConnected) {
+                alert('Please connect your wallet first!');
+                return;
+            }
+
             try {
-                log('info', 'Estimating gas for flash loan...');
+                log('info', 'Estimating gas costs...');
                 
-                // Simple gas estimation for a basic transaction
+                // Get current gas price
                 const gasPrice = await window.ethereum.request({
                     method: 'eth_gasPrice'
                 });
                 
-                // Estimate ~200,000 gas for a flash loan
-                const estimatedGas = 200000;
-                const gasCost = (estimatedGas * parseInt(gasPrice, 16)) / Math.pow(10, 18);
+                const gasPriceGwei = parseInt(gasPrice, 16) / Math.pow(10, 9);
+                log('info', `Current gas price: ${gasPriceGwei.toFixed(2)} Gwei`);
                 
-                log('info', `Estimated gas: ${estimatedGas.toLocaleString()} units`);
-                log('info', `Estimated cost: ${gasCost.toFixed(6)} ETH`);
-                log('info', `Flash loan fee: 0.09 USDC (0.09% of 100 USDC)`);
+                // Estimate gas for simple transaction
+                try {
+                    const gasEstimate = await window.ethereum.request({
+                        method: 'eth_estimateGas',
+                        params: [{
+                            from: userAccount,
+                            to: userAccount,
+                            value: '0x0'
+                        }]
+                    });
+                    
+                    const gasAmount = parseInt(gasEstimate, 16);
+                    const gasCost = (gasAmount * parseInt(gasPrice, 16)) / Math.pow(10, 18);
+                    
+                    log('success', `✅ Gas estimation successful:`);
+                    log('info', `• Simple transaction: ${gasAmount.toLocaleString()} gas`);
+                    log('info', `• Cost: ${gasCost.toFixed(6)} ETH (≈${(gasCost * 1800).toFixed(3)})`);
+                    log('info', `• Flash loan would need ~200,000 gas`);
+                    log('info', `• Flash loan cost: ~${((200000 * parseInt(gasPrice, 16)) / Math.pow(10, 18)).toFixed(6)} ETH`);
+                    
+                } catch (gasError) {
+                    log('error', `Gas estimation failed: ${gasError.message}`);
+                    
+                    // Fallback estimation
+                    const basicGasCost = (21000 * parseInt(gasPrice, 16)) / Math.pow(10, 18);
+                    log('info', `Fallback estimate - Basic transaction: ${basicGasCost.toFixed(6)} ETH`);
+                }
+                
+                // Check if user has enough ETH
+                const balance = await window.ethereum.request({
+                    method: 'eth_getBalance',
+                    params: [userAccount, 'latest']
+                });
+                
+                const ethBalance = parseFloat(parseInt(balance, 16) / Math.pow(10, 18));
+                
+                if (ethBalance < 0.001) {
+                    log('error', '⚠️ Low ETH balance for gas fees');
+                    log('info', 'Get testnet ETH from:');
+                    
+                    // Add clickable faucet links
+                    const logElement = document.getElementById('transaction-log');
+                    const faucetEntry = document.createElement('div');
+                    faucetEntry.className = 'log-entry log-info';
+                    faucetEntry.innerHTML = `[${new Date().toLocaleTimeString()}] <a href="https://sepoliafaucet.com/" target="_blank" style="color: #00ffff; text-decoration: underline;">SepoliaFaucet.com</a>`;
+                    logElement.insertBefore(faucetEntry, logElement.firstChild);
+                    
+                    const faucetEntry2 = document.createElement('div');
+                    faucetEntry2.className = 'log-entry log-info';
+                    faucetEntry2.innerHTML = `[${new Date().toLocaleTimeString()}] <a href="https://faucets.chain.link/sepolia" target="_blank" style="color: #00ffff; text-decoration: underline;">Chainlink Faucet</a>`;
+                    logElement.insertBefore(faucetEntry2, logElement.firstChild);
+                    
+                } else {
+                    log('success', `✅ Sufficient balance: ${ethBalance.toFixed(4)} ETH`);
+                }
                 
             } catch (error) {
                 log('error', `Gas estimation failed: ${error.message}`);
+                console.error('Gas estimation error:', error);
             }
         }
 
@@ -355,85 +412,111 @@
                 return;
             }
 
-            if (!confirm('⚠️ TEST FLASH LOAN ⚠️\n\nThis will attempt a 100 USDC flash loan on Sepolia testnet.\n\nYou will pay gas fees (~0.002-0.005 ETH).\n\nProceed?')) {
+            if (!confirm('⚠️ TEST TRANSACTION ⚠️\n\nThis will send a simple test transaction to verify the connection works.\n\nYou will pay a small gas fee (~0.0005 ETH).\n\nProceed?')) {
                 return;
             }
 
             try {
-                log('info', '🚨 TESTING FLASH LOAN 🚨');
+                log('info', '🚨 TESTING BLOCKCHAIN CONNECTION 🚨');
                 document.getElementById('test-btn').textContent = '⏳ Testing...';
                 document.getElementById('test-btn').disabled = true;
 
-                // Simple flash loan call to Aave pool
-                // Note: This is a simplified test that may fail due to lack of receiver contract
-                // But it will show if the connection and basic setup works
-                
-                const amountWei = '100000000'; // 100 USDC (6 decimals)
-                
-                // Create basic flash loan transaction data
-                const flashLoanData = {
-                    from: userAccount,
-                    to: AAVE_POOL_ADDRESS,
-                    gas: '0x30d40', // 200,000 gas
-                    data: '0x' // Simplified - would need proper encoding for real flash loan
-                };
+                // Get current gas price
+                const gasPrice = await window.ethereum.request({
+                    method: 'eth_gasPrice'
+                });
 
-                log('info', 'Preparing flash loan transaction...');
-                log('info', `Pool: ${AAVE_POOL_ADDRESS}`);
-                log('info', `Amount: 100 USDC`);
-                log('info', `From: ${userAccount.slice(0, 8)}...`);
+                log('info', `Current gas price: ${parseInt(gasPrice, 16).toLocaleString()} wei`);
+                log('info', `From account: ${userAccount.slice(0, 8)}...`);
 
-                // For testing purposes, we'll do a simpler contract call first
-                // to verify the connection works
+                // Send a simple self-transaction (most likely to succeed)
                 const transaction = await window.ethereum.request({
                     method: 'eth_sendTransaction',
                     params: [{
                         from: userAccount,
-                        to: AAVE_POOL_ADDRESS,
-                        gas: '0x5208', // 21000 gas for basic transaction
-                        value: '0x0'
+                        to: userAccount, // Send to self
+                        value: '0x0', // 0 ETH
+                        gas: '0x5208', // 21000 gas (minimum)
+                        gasPrice: gasPrice
                     }]
                 });
 
                 log('success', `✅ Test transaction sent: ${transaction}`);
-                log('info', `Etherscan: https://sepolia.etherscan.io/tx/${transaction}`);
+                
+                // Create clickable Etherscan link
+                const etherscanUrl = `https://sepolia.etherscan.io/tx/${transaction}`;
+                log('info', `Track on Etherscan:`);
+                
+                // Add clickable link to log
+                const logElement = document.getElementById('transaction-log');
+                const linkEntry = document.createElement('div');
+                linkEntry.className = 'log-entry log-info';
+                linkEntry.innerHTML = `[${new Date().toLocaleTimeString()}] <a href="${etherscanUrl}" target="_blank" style="color: #00ffff; text-decoration: underline;">${etherscanUrl}</a>`;
+                logElement.insertBefore(linkEntry, logElement.firstChild);
+                
                 log('info', 'Waiting for confirmation...');
 
-                // Monitor transaction
+                // Monitor transaction with better error handling
                 let receipt = null;
-                for (let i = 0; i < 20; i++) {
+                let attempts = 0;
+                const maxAttempts = 30; // 1.5 minutes
+                
+                while (attempts < maxAttempts && !receipt) {
                     try {
                         receipt = await window.ethereum.request({
                             method: 'eth_getTransactionReceipt',
                             params: [transaction]
                         });
-                        if (receipt) break;
-                    } catch (e) {}
+                        
+                        if (receipt) {
+                            break;
+                        }
+                    } catch (e) {
+                        console.log('Receipt check failed:', e.message);
+                    }
+                    
                     await new Promise(resolve => setTimeout(resolve, 3000));
-                    log('info', `Waiting... (${i * 3}s)`);
+                    attempts++;
+                    
+                    if (attempts % 5 === 0) {
+                        log('info', `Still waiting... (${attempts * 3}s) - Check Etherscan link above`);
+                    }
                 }
 
                 if (receipt) {
                     if (receipt.status === '0x1') {
                         log('success', '🎉 TEST TRANSACTION SUCCESSFUL! 🎉');
+                        log('success', `Block: ${parseInt(receipt.blockNumber, 16)}`);
                         log('success', `Gas used: ${parseInt(receipt.gasUsed, 16).toLocaleString()}`);
-                        log('info', 'Basic blockchain interaction works!');
-                        log('info', 'Next step: Deploy proper flash loan receiver contract');
+                        
+                        const gasUsed = parseInt(receipt.gasUsed, 16);
+                        const gasCost = (gasUsed * parseInt(gasPrice, 16)) / Math.pow(10, 18);
+                        log('info', `Total cost: ${gasCost.toFixed(6)} ETH`);
+                        
+                        log('success', '✅ Your wallet and Sepolia connection work perfectly!');
+                        log('info', 'Next: We can try more complex transactions');
+                        
                     } else {
-                        log('error', '❌ Test transaction failed');
+                        log('error', '❌ Transaction failed on blockchain');
+                        log('error', 'Check the Etherscan link above for details');
                     }
                 } else {
-                    log('error', '⚠️ Transaction timeout - check Etherscan');
+                    log('error', '⚠️ Transaction confirmation timeout');
+                    log('info', 'Transaction might still be pending - check Etherscan link above');
                 }
 
             } catch (error) {
-                log('error', `Test failed: ${error.message}`);
+                log('error', `Transaction failed: ${error.message}`);
                 
                 if (error.code === 4001) {
                     log('error', 'Transaction rejected by user');
                 } else if (error.message.includes('insufficient funds')) {
                     log('error', 'Insufficient ETH for gas fees');
+                    log('info', 'Try getting more testnet ETH from: https://sepoliafaucet.com/');
+                } else if (error.message.includes('gas')) {
+                    log('error', 'Gas-related error - network might be congested');
                 } else {
+                    log('error', 'Unknown error - check browser console for details');
                     console.error('Full error:', error);
                 }
             }
