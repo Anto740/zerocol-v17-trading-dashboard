@@ -363,6 +363,7 @@
                 }
 
                 userAccount = accounts[0];
+                isConnected = true; // Fix: Set this immediately
                 log('success', `Connected: ${userAccount}`);
 
                 // Get current chain
@@ -370,7 +371,8 @@
                     method: 'eth_chainId'
                 });
 
-                // Update UI
+                // Update UI immediately
+                document.getElementById('connect-btn').textContent = '✅ Connected';
                 updateAccountInfo();
 
                 if (currentChainId !== SEPOLIA_CHAIN_ID) {
@@ -382,6 +384,7 @@
 
             } catch (error) {
                 log('error', `Connection failed: ${error.message}`);
+                isConnected = false; // Fix: Reset state on error
                 document.getElementById('connect-btn').textContent = '🦊 Connect MetaMask';
                 document.getElementById('connect-btn').disabled = false;
             }
@@ -616,6 +619,21 @@
         // Execute Flash Loan (REAL TRANSACTION)
         async function executeFlashLoan() {
             try {
+                // Force check connection state
+                if (!userAccount || !isConnected) {
+                    // Try to reconnect automatically
+                    log('warning', 'Reconnecting wallet...');
+                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts.length > 0) {
+                        userAccount = accounts[0];
+                        isConnected = true;
+                        log('success', 'Wallet reconnected automatically');
+                    } else {
+                        alert('Please connect your wallet first!');
+                        return;
+                    }
+                }
+
                 const amount = document.getElementById('loan-amount').value;
                 if (!amount || amount <= 0) {
                     alert('Please enter a valid loan amount');
@@ -633,6 +651,7 @@
 
                 log('warning', '🚨 EXECUTING REAL FLASH LOAN 🚨');
                 log('info', `Amount: ${amount} USDC`);
+                log('info', `From Account: ${userAccount}`);
                 log('info', `Receiver Contract: ${window.receiverContract}`);
                 
                 document.getElementById('execute-btn').textContent = '⏳ Executing...';
